@@ -7,7 +7,7 @@ const app = express();
 app.use(express.json());
 
 // Your VPN endpoint
-const VPN_ENDPOINT = `${process.env.VPN_ENDPOINT}/webhooks/port-in`;
+const FORWARD_ENDPOINT = `${process.env.SERVICE_BASE_URL}/v1/webhooks/port-in`;
 const PORT = process.env.PORT ?? 3000;
 
 // Store ngrok URL
@@ -21,27 +21,26 @@ app.use((req, res, next) => {
     }`,
     req.body
   );
-  console.log(`forwarding to ${VPN_ENDPOINT}`);
+  console.log(`forwarding to ${FORWARD_ENDPOINT}`);
   next();
 });
 
 // Forward all requests to VPN endpoint
 app.use("/", async (req, res) => {
   try {
-    console.log(`forwarding to ${VPN_ENDPOINT}`);
     // Forward the request to VPN endpoint with original method, headers and body
     const response = await axios({
       method: req.method,
-      url: VPN_ENDPOINT,
+      url: FORWARD_ENDPOINT,
       headers: {
         ...req.headers,
-        host: new URL(VPN_ENDPOINT).host, // Replace host header
+        host: new URL(FORWARD_ENDPOINT).host, // Replace host header
       },
       data: req.body,
       validateStatus: false, // Don't throw on non-2xx responses
     });
     console.log(
-      `response from ${VPN_ENDPOINT}`,
+      `response from ${FORWARD_ENDPOINT}`,
       response.status,
       response.data
     );
@@ -62,10 +61,11 @@ app.use("/", async (req, res) => {
 // Start the server and create ngrok tunnel
 async function startServer() {
   try {
+    await checkServiceStatus();
     // Start express server
     app.listen(PORT, () => {
       console.log(
-        `Server is running on port ${PORT}, will be forwarding requests to ${VPN_ENDPOINT}`
+        `Server is running on port ${PORT}, will be forwarding requests to ${FORWARD_ENDPOINT}`
       );
     });
 
@@ -125,6 +125,23 @@ async function updateTwilioWebhook(portInTargetUrl) {
       error.message,
       error.response?.data
     );
+  }
+}
+
+async function checkServiceStatus() {
+  try {
+    const healthCheckEndpoint = `${process.env.SERVICE_BASE_URL}/v1/health/check`;
+    await axios.get(healthCheckEndpoint);
+    console.log("Forwarding service is healthy and running...");
+  } catch (error) {
+    if (error.response?.status === 403) {
+      console.error("Please check if VPN is connected...");
+    } else if (error.response?.status === 503) {
+      console.error("Forwarding service unavailable...");
+    } else {
+      console.error("Error checking service status:", error.message);
+    }
+    process.exit(1);
   }
 }
 
