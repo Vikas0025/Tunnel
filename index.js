@@ -136,12 +136,12 @@ async function checkServiceStatus() {
   } catch (error) {
     if (error.response?.status === 403) {
       console.error("Please check if VPN is connected...");
+      process.exit(1);
     } else if (error.response?.status === 503) {
       console.error("Forwarding service unavailable...");
     } else {
       console.error("Error checking service status:", error.message);
     }
-    process.exit(1);
   }
 }
 
